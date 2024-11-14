@@ -1,0 +1,25 @@
+syntax = "proto3";  
+package broker;  
+
+option go_package = "../broker";  
+
+service BrokerService {  
+    rpc RegisterTopic(TopicRequest) returns (Empty);
+    rpc SendMessage(stream SendMessageRequest) returns (Empty);  
+    rpc RetrieveMessage(TopicRequest) returns (stream RetrieveMessageResponse);  
+}  
+
+message Empty {}  
+
+message TopicRequest {
+    string topic = 1;
+}
+
+message SendMessageRequest {  
+    string topic = 1;  
+    bytes msg = 2;  
+}
+
+message RetrieveMessageResponse {  
+    bytes msg = 1;  
+}

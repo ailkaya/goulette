@@ -1,0 +1,4 @@
+app:
+  port: 8080
+  log-path: "log.out"
+  buffer-size: 10000000
