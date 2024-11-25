@@ -3,92 +3,166 @@ package service
 import (
 	"context"
 	"fmt"
-	"io"
 
 	// "time"
 
-	// "sync/atomic"
-
-	"github.com/ailkaya/goport/broker"
+	pb "github.com/ailkaya/goport/broker"
 	"github.com/ailkaya/goport/common/config"
 	"github.com/ailkaya/goport/common/logger"
-	"github.com/ailkaya/goport/controller"
+	"github.com/ailkaya/goport/core"
 	"google.golang.org/grpc"
 )
 
+var (
+	sendBucketSize int64 = 100
+	recvBucketSize int64 = 50
+)
+
 type Service struct {
-	broker.UnimplementedBrokerServiceServer
-	controller controller.IController
-	logger     logger.ILog
+	pb.UnimplementedBrokerServiceServer
+	core   *core.Core
+	logger logger.ILog
 }
 
 func NewService() *Service {
 	return &Service{
-		controller: controller.NewController(config.Conf.APP.BufferSize),
-		logger:     logger.Log,
+		core:   core.NewCore(config.Conf.APP.BufferSize, config.Conf.APP.BucketSize),
+		logger: logger.Log,
 	}
 }
 
-// 创建一个新的topic(如果已经存在则忽略)
-func (s *Service) RegisterTopic(ctx context.Context, req *broker.TopicRequest) (*broker.Empty, error) {
-	s.controller.RegisterTopic(req.GetTopic())
+func (s *Service) RegisterTopic(ctx context.Context, req *pb.TopicRequest) (*pb.Empty, error) {
+	s.core.RegisterTopic(req.GetTopic())
 	return nil, nil
 }
 
-// 向指定topic持续发送消息
-func (s *Service) SendMessage(stream grpc.ClientStreamingServer[broker.SendMessageRequest, broker.Empty]) error {
-	var topic string
-	// 从流中接收消息
+func (s *Service) SendMessage(stream grpc.BidiStreamingServer[pb.SendMessageRequestOption, pb.Acknowledgment]) error {
+	topic, err := s.initSendConn(stream)
+	if err != nil {
+		s.logger.Errorf("service init: failed to receive message: %v", err)
+		return err
+	}
+	if !s.core.IsTopicExist(topic) {
+		return fmt.Errorf("topic %s not exist", topic)
+	}
+
+	var (
+		handler = core.NewSendHandle(s.core, topic, sendBucketSize)
+		req     = &pb.SendMessageRequestOption{}
+		resp    = &pb.Acknowledgment{}
+		// mid: 当前获取的消息id ackid: 需要ack的消息id retryid: 表示该次请求是否为重试请求, retryid为上次请求的mid
+		mid, ackid, retryid int64
+		msg                 []byte
+	)
+	// 初始化成功，开始从client接收消息
 	for {
-		msg, err := stream.Recv()
-		// fmt.Println("Service Received message: ", msg)
-		if err == io.EOF {
-			fmt.Println("Client closed the stream")
-			// 客户端关闭了发送，正常结束
-			break
-		}
+		req, err = stream.Recv()
 		if err != nil {
 			s.logger.Errorf("failed to receive message: %v", err)
-			return fmt.Errorf("failed to receive message: %v", err)
+			break
 		}
-		topic = msg.GetTopic() // 获取主题
-		// 将消息存储到相应的主题
-		// fmt.Println(topic, "Add to channel:", msg.GetMsg())
-		err = s.controller.SendMessage(topic, msg.GetMsg())
+		mid, msg, ackid, retryid = req.GetMid(), req.GetMsg(), req.GetAckid(), req.GetRetryid()
+		if ackid != -1 {
+			// 防止重复send(从client recv)
+			handler.Ack(ackid)
+			continue
+		} else {
+			err = handler.Push(mid, retryid, msg)
+			if err != nil {
+				s.logger.Errorf("failed to push message: %v", err)
+				continue
+			}
+		}
+		resp.Mid = mid
+		err = stream.Send(resp) // send ack
 		if err != nil {
 			s.logger.Errorf("failed to send message: %v", err)
-			return fmt.Errorf("failed to send message: %v", err)
+			break
 		}
+		// fmt.Println("push message:", msg)
 	}
-	// 发送一个空的响应表示成功
-	return stream.SendAndClose(&broker.Empty{})
+	handler.Close()
+	return nil
 }
 
-// 从指定topic中持续获取消息
-func (s *Service) RetrieveMessage(req *broker.TopicRequest, stream grpc.ServerStreamingServer[broker.RetrieveMessageResponse]) error {
-	topic := req.GetTopic()
-	response := &broker.RetrieveMessageResponse{}
-	// time.Sleep(time.Second * 2)
-	// fmt.Println("Service receiving message start")
-	// stream.Send(nil)
-	// stream.Send(nil)
-	for i := 0; i < 10; i++ {
-		stream.Send(nil)
+func (s *Service) initSendConn(stream grpc.BidiStreamingServer[pb.SendMessageRequestOption, pb.Acknowledgment]) (topic string, e error) {
+	msg, err := stream.Recv()
+	if err != nil {
+		e = err
+		return
 	}
-	// 从控制器中获取消息
-	for {
-		message, err := s.controller.RetrieveMessage(topic)
-		if err != nil {
-			s.logger.Errorf("failed to retrieve message: %v", err)
-			return fmt.Errorf("failed to retrieve message: %v", err)
-		}
-		// 创建响应并发送
-		response.Msg = message
-		// fmt.Println("Service Sending message:", response)
+	topic = msg.GetTopic()
+	err = stream.Send(nil) // send ack
+	if err != nil {
+		e = err
+	}
+	return
+}
 
-		err = stream.Send(response)
-		if err != nil {
-			return fmt.Errorf("failed to send message: %v", err)
-		}
+func (s *Service) RecvMessage(stream grpc.BidiStreamingServer[pb.RecvMessageRequestOption, pb.Data]) error {
+	topic, err := s.initRecvConn(stream)
+	if err != nil {
+		s.logger.Errorf("service init: failed to receive message: %v", err)
+		return err
 	}
+	if !s.core.IsTopicExist(topic) {
+		return fmt.Errorf("topic %s not exist", topic)
+	}
+
+	var (
+		handler             = core.NewRecvHandle(s.core, topic, recvBucketSize)
+		req                 = &pb.RecvMessageRequestOption{}
+		resp                = &pb.Data{}
+		mid, ackid, retryid int64
+	)
+	// 开始向client发送消息
+	for {
+		// fmt.Print(1)
+		req, err = stream.Recv()
+		if err != nil {
+			s.logger.Errorf("failed to receive message: %v", err)
+			break
+		}
+		// fmt.Println(2)
+		mid, ackid, retryid = req.GetMid(), req.GetAckid(), req.GetRetryid()
+		// fmt.Println(mid, ackid, retryid)
+		// 如果ackid不为-1，则表示是ack请求
+		if ackid != -1 {
+			// 防止重复recv(send到client)
+			handler.Ack(ackid)
+			// resp.Msg = nil
+			continue
+		} else {
+			resp.Msg, err = handler.Pull(mid, retryid)
+			// fmt.Print(3)
+			if err != nil {
+				s.logger.Errorf("failed to pop message: %v", err)
+				continue
+			}
+		}
+
+		resp.Mid = mid
+		if err = stream.Send(resp); err != nil {
+			s.logger.Errorf("failed to send message: %v", err)
+			break
+		}
+		// fmt.Println("pull message:", resp.Msg)
+	}
+	// fmt.Println("recv close")
+	handler.Close()
+	return nil
+}
+
+func (s *Service) initRecvConn(stream grpc.BidiStreamingServer[pb.RecvMessageRequestOption, pb.Data]) (topic string, e error) {
+	msg, err := stream.Recv()
+	if err != nil {
+		e = err
+		return
+	}
+	topic = msg.GetTopic()
+	err = stream.Send(nil) // send ack
+	if err != nil {
+		e = err
+	}
+	return
 }

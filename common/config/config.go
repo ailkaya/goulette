@@ -16,7 +16,8 @@ type Config struct {
 type APP struct {
 	Port       string `yaml:"port"`
 	LogPath    string `yaml:"log-path"`
-	BufferSize int    `yaml:"buffer-size"`
+	BufferSize int64  `yaml:"buffer-size"`
+	BucketSize int64  `yaml:"bucket-size"`
 }
 
 func InitConf() error {

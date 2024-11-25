@@ -19,9 +19,9 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	BrokerService_RegisterTopic_FullMethodName   = "/broker.BrokerService/RegisterTopic"
-	BrokerService_SendMessage_FullMethodName     = "/broker.BrokerService/SendMessage"
-	BrokerService_RetrieveMessage_FullMethodName = "/broker.BrokerService/RetrieveMessage"
+	BrokerService_RegisterTopic_FullMethodName = "/broker.BrokerService/RegisterTopic"
+	BrokerService_SendMessage_FullMethodName   = "/broker.BrokerService/SendMessage"
+	BrokerService_RecvMessage_FullMethodName   = "/broker.BrokerService/RecvMessage"
 )
 
 // BrokerServiceClient is the client API for BrokerService service.
@@ -29,8 +29,8 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type BrokerServiceClient interface {
 	RegisterTopic(ctx context.Context, in *TopicRequest, opts ...grpc.CallOption) (*Empty, error)
-	SendMessage(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[SendMessageRequest, Empty], error)
-	RetrieveMessage(ctx context.Context, in *TopicRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[RetrieveMessageResponse], error)
+	SendMessage(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[SendMessageRequestOption, Acknowledgment], error)
+	RecvMessage(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[RecvMessageRequestOption, Data], error)
 }
 
 type brokerServiceClient struct {
@@ -51,45 +51,39 @@ func (c *brokerServiceClient) RegisterTopic(ctx context.Context, in *TopicReques
 	return out, nil
 }
 
-func (c *brokerServiceClient) SendMessage(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[SendMessageRequest, Empty], error) {
+func (c *brokerServiceClient) SendMessage(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[SendMessageRequestOption, Acknowledgment], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &BrokerService_ServiceDesc.Streams[0], BrokerService_SendMessage_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &grpc.GenericClientStream[SendMessageRequest, Empty]{ClientStream: stream}
+	x := &grpc.GenericClientStream[SendMessageRequestOption, Acknowledgment]{ClientStream: stream}
 	return x, nil
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type BrokerService_SendMessageClient = grpc.ClientStreamingClient[SendMessageRequest, Empty]
+type BrokerService_SendMessageClient = grpc.BidiStreamingClient[SendMessageRequestOption, Acknowledgment]
 
-func (c *brokerServiceClient) RetrieveMessage(ctx context.Context, in *TopicRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[RetrieveMessageResponse], error) {
+func (c *brokerServiceClient) RecvMessage(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[RecvMessageRequestOption, Data], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &BrokerService_ServiceDesc.Streams[1], BrokerService_RetrieveMessage_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &BrokerService_ServiceDesc.Streams[1], BrokerService_RecvMessage_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &grpc.GenericClientStream[TopicRequest, RetrieveMessageResponse]{ClientStream: stream}
-	if err := x.ClientStream.SendMsg(in); err != nil {
-		return nil, err
-	}
-	if err := x.ClientStream.CloseSend(); err != nil {
-		return nil, err
-	}
+	x := &grpc.GenericClientStream[RecvMessageRequestOption, Data]{ClientStream: stream}
 	return x, nil
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type BrokerService_RetrieveMessageClient = grpc.ServerStreamingClient[RetrieveMessageResponse]
+type BrokerService_RecvMessageClient = grpc.BidiStreamingClient[RecvMessageRequestOption, Data]
 
 // BrokerServiceServer is the server API for BrokerService service.
 // All implementations must embed UnimplementedBrokerServiceServer
 // for forward compatibility.
 type BrokerServiceServer interface {
 	RegisterTopic(context.Context, *TopicRequest) (*Empty, error)
-	SendMessage(grpc.ClientStreamingServer[SendMessageRequest, Empty]) error
-	RetrieveMessage(*TopicRequest, grpc.ServerStreamingServer[RetrieveMessageResponse]) error
+	SendMessage(grpc.BidiStreamingServer[SendMessageRequestOption, Acknowledgment]) error
+	RecvMessage(grpc.BidiStreamingServer[RecvMessageRequestOption, Data]) error
 	mustEmbedUnimplementedBrokerServiceServer()
 }
 
@@ -103,11 +97,11 @@ type UnimplementedBrokerServiceServer struct{}
 func (UnimplementedBrokerServiceServer) RegisterTopic(context.Context, *TopicRequest) (*Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RegisterTopic not implemented")
 }
-func (UnimplementedBrokerServiceServer) SendMessage(grpc.ClientStreamingServer[SendMessageRequest, Empty]) error {
+func (UnimplementedBrokerServiceServer) SendMessage(grpc.BidiStreamingServer[SendMessageRequestOption, Acknowledgment]) error {
 	return status.Errorf(codes.Unimplemented, "method SendMessage not implemented")
 }
-func (UnimplementedBrokerServiceServer) RetrieveMessage(*TopicRequest, grpc.ServerStreamingServer[RetrieveMessageResponse]) error {
-	return status.Errorf(codes.Unimplemented, "method RetrieveMessage not implemented")
+func (UnimplementedBrokerServiceServer) RecvMessage(grpc.BidiStreamingServer[RecvMessageRequestOption, Data]) error {
+	return status.Errorf(codes.Unimplemented, "method RecvMessage not implemented")
 }
 func (UnimplementedBrokerServiceServer) mustEmbedUnimplementedBrokerServiceServer() {}
 func (UnimplementedBrokerServiceServer) testEmbeddedByValue()                       {}
@@ -149,22 +143,18 @@ func _BrokerService_RegisterTopic_Handler(srv interface{}, ctx context.Context, 
 }
 
 func _BrokerService_SendMessage_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(BrokerServiceServer).SendMessage(&grpc.GenericServerStream[SendMessageRequest, Empty]{ServerStream: stream})
+	return srv.(BrokerServiceServer).SendMessage(&grpc.GenericServerStream[SendMessageRequestOption, Acknowledgment]{ServerStream: stream})
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type BrokerService_SendMessageServer = grpc.ClientStreamingServer[SendMessageRequest, Empty]
+type BrokerService_SendMessageServer = grpc.BidiStreamingServer[SendMessageRequestOption, Acknowledgment]
 
-func _BrokerService_RetrieveMessage_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(TopicRequest)
-	if err := stream.RecvMsg(m); err != nil {
-		return err
-	}
-	return srv.(BrokerServiceServer).RetrieveMessage(m, &grpc.GenericServerStream[TopicRequest, RetrieveMessageResponse]{ServerStream: stream})
+func _BrokerService_RecvMessage_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(BrokerServiceServer).RecvMessage(&grpc.GenericServerStream[RecvMessageRequestOption, Data]{ServerStream: stream})
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type BrokerService_RetrieveMessageServer = grpc.ServerStreamingServer[RetrieveMessageResponse]
+type BrokerService_RecvMessageServer = grpc.BidiStreamingServer[RecvMessageRequestOption, Data]
 
 // BrokerService_ServiceDesc is the grpc.ServiceDesc for BrokerService service.
 // It's only intended for direct use with grpc.RegisterService,
@@ -182,12 +172,14 @@ var BrokerService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "SendMessage",
 			Handler:       _BrokerService_SendMessage_Handler,
+			ServerStreams: true,
 			ClientStreams: true,
 		},
 		{
-			StreamName:    "RetrieveMessage",
-			Handler:       _BrokerService_RetrieveMessage_Handler,
+			StreamName:    "RecvMessage",
+			Handler:       _BrokerService_RecvMessage_Handler,
 			ServerStreams: true,
+			ClientStreams: true,
 		},
 	},
 	Metadata: "broker.proto",

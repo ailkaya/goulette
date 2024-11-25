@@ -1,4 +1,5 @@
 app:
   port: 8080
   log-path: "log.out"
-  buffer-size: 10000000
+  buffer-size: 1000
+  bucket-size: 500000
