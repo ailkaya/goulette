@@ -1,0 +1,13 @@
+test_params:
+  test_count: 200
+  num_messages: 50000
+  consumer_n: 1
+  brokers:
+  - "127.0.0.1:8080"
+  max_connections: 2
+  in_buffer_size: 10000
+  out_buffer_size: 1000
+  base_receive: 2000
+  send_concurrency: 5000
+  receive_concurrency: 5000
+  ack_interval: 2000

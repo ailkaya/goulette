@@ -5,37 +5,57 @@ option go_package = "../broker";
 
 service BrokerService {  
     rpc RegisterTopic(TopicRequest) returns (Empty);
-    rpc SendMessage(stream SendMessageRequestOption) returns (stream Acknowledgment);  
-    rpc RecvMessage(stream RecvMessageRequestOption) returns (stream Data);  
+    rpc Acknowledge(AcknowledgeRequest) returns (Empty);
+    rpc Close(CloseRequest) returns (Empty);
+    rpc Produce(stream ProduceRequestOption) returns (stream Acknowledgment);  
+    rpc Consume(stream ConsumeRequestOption) returns (stream DataResponse);  
 }  
 
 message Empty {}  
 
 message Acknowledgment {
-    int64 mid = 1;
+    sint32 initTargetId = 15;
+
+    sint32 mId = 1;
 }
 
 message TopicRequest {
     string topic = 1;
 }
 
-message Data {
-    int64 mid = 1;
+message AcknowledgeRequest {
+    // bool close = 1;
+    sint32 ackTarget = 1;
+    sint32 ackId = 2;
+}
+
+message CloseRequest {
+    sint32 target = 1;
+}
+
+message DataResponse {
+    sint32 initTargetId = 15;
+
+    sint32 mId = 1;
     bytes msg = 2;
+} 
+
+message ProduceRequestOption {
+    string initAddr = 15;
+    string initTopic = 14;
+
+    sint32 mId = 1;
+    bytes msg = 2;
+    // sint32 ackId = 3;
+    sint32 retryId = 3;
 }
 
-message SendMessageRequestOption {
-    string topic = 1;
-    int64 mid = 2;
-    bytes msg = 3;
-    int64 ackid = 4;
-    int64 retryid = 5;
-}
+message ConsumeRequestOption {
+    string initAddr = 15;
+    string initTopic = 14;
 
-message RecvMessageRequestOption {
-    string topic = 1;
-    int64 mid = 2;
-    int64 ackid = 3;
-    int64 retryid = 4;
+    sint32 mId = 1;
+    // sint32 ackId = 2;
+    sint32 retryId = 2;
 }
 

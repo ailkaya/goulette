@@ -1,0 +1,19 @@
+# client:
+#   registery_addr: 127.0.0.1:8500
+#   brokers:
+#     - addr: 127.0.0.1:9092
+#       initial_number_of_containers: 1
+#       min_number_of_containers: 1
+#       max_number_of_containers: 1
+#       reward_limit: 0.2
+#       penalty_limit: 0.2
+
+app:
+  port: 8080
+  log-path: "log.out"
+  buffer-size: 100000
+  # bucket-size: 5000
+  # client ack间隔不能大于以下的bucket-size
+  send-bucket-size-per-stream: 10000
+  recv-bucket-size-per-stream: 10000
+  max-receive-per-cycle: 2000

@@ -1,5 +1,6 @@
-/main.exe
-/log.out
-/test/test.exe
-/test/log.out
-/broker/makefile
+/test/client
+/test/main/log.out
+/test/main/main.exe
+/server/cmd/cmd.exe
+/server/cmd/log.out
+/bin
