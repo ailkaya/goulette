@@ -1,0 +1,33 @@
+环境：i5-13420H 16G
+
+压测结果：
+broker收到消息后不写磁盘：10B负载: 48w/s；100B负载：42w/s；1KB负载：20w/s
+收到后直接写磁盘：10B负载: 16w/s；100B负载：15w/s；1KB负载：11w/s
+使用带缓冲的写磁盘方法：10B负载: 46w/s；100B负载：40w/s；1KB负载：19w/s
+
+配置文件(config.yaml)：
+# server端配置
+app:
+  port: 8080
+  log-path: "log.out"
+  buffer-size: 20000
+  # bucket-size: 5000
+  # client ack间隔不能大于bucket-size
+  send-bucket-size-per-stream: 10000
+  recv-bucket-size-per-stream: 10000
+  max-receive-per-cycle: 2000
+
+# 测试配置
+test_params:
+  test_count: 30
+  num_messages: 100000
+  consumer_n: 1
+  brokers:
+  - "127.0.0.1:8080"
+  max_connections: 2
+  in_buffer_size: 10000
+  out_buffer_size: 1000
+  base_receive: 2000
+  send_concurrency: 5000
+  receive_concurrency: 5000
+  ack_interval: 1000
