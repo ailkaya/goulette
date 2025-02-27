@@ -1,6 +1,0 @@
-1. client端send和recv的桶容量(影响较大)
-2. client端send和recv的协程数(较小时影响大)
-3. client端消息数量对齐操作中的MaxReceive(一个周期内的基准接收数)(影响较小)
-4. client端消息ack间隔(影响较大)
-5. server端的桶大小一旦设置的比client端的消息ack间隔小，server端程序运行时一定会有阻塞问题
-6. 消息的载荷大小，10B下的效率约为1KB下效率的3倍
