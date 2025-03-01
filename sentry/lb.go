@@ -125,13 +125,13 @@ func NewConsistentHash(opts ...Option) *ConsistentHash {
 	for _, opt := range opts {
 		opt.Apply(ch)
 	}
-	go ch.exec()
+	go ch.update()
 	go ch.clean()
 	ch.watch()
 	return ch
 }
 
-func (ch *ConsistentHash) exec() {
+func (ch *ConsistentHash) update() {
 	for f := range ch.updates {
 		f()
 	}

@@ -3,14 +3,15 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/ailkaya/goulette/singleton"
 	grpc_recovery "github.com/grpc-ecosystem/go-grpc-middleware/recovery"
 	"go.etcd.io/etcd/server/v3/embed"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/status"
-	"goulette/sentry"
-	"goulette/sentry/pb"
+	"github.com/ailkaya/goulette/sentry"
+	"github.com/ailkaya/goulette/sentry/pb"
 	"k8s.io/klog/v2"
 	"log"
 	"net"
@@ -78,7 +79,7 @@ func StartGrpcService() {
 	)
 	klog.Infof("start server, listen: %v\n", GrpcPort)
 	// 注册服务
-	pb.RegisterSentryServiceServer(grpcServer, sentry.NewService(sentry.NewConsistentHash()))
+	pb.RegisterSentryServiceServer(grpcServer, sentry.NewService(sentry.NewEtcdCli(singleton.GetEtcdCli(), sentry.NewConsistentHash())))
 	// 启动服务
 	if err := grpcServer.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)
