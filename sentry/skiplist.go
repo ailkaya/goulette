@@ -7,6 +7,14 @@ import (
 	"time"
 )
 
+type Ring interface {
+	AddTopicNode(location uint64, alive *int64)
+	AddBrokerNode(addr string, location uint64, status *int64)
+	RemoveNode(location uint64)
+	GetNextBroker(location uint64, forConsumer bool) (string, error)
+	Clean()
+}
+
 // Ring 的环实现，使用跳表实现
 type skipList struct {
 	dummy *floatPile
@@ -86,12 +94,19 @@ func (sl *skipList) RemoveNode(location uint64) {
 	sl.removeNode(p)
 }
 
-func (sl *skipList) GetNextBroker(location uint64) (addr string, err error) {
+func (sl *skipList) GetNextBroker(location uint64, forConsumer bool) (addr string, err error) {
 	fp := sl.locateFloatPile(location).layers[1]
 	nfp := fp
-	for *nfp.status() != 1 && nfp != fp {
-		nfp = nfp.layers[1]
+	if forConsumer {
+		for *nfp.status() != Alive && nfp != fp {
+			nfp = nfp.layers[1]
+		}
+	} else {
+		for *nfp.status() != Alive && *nfp.status() != Closing && nfp != fp {
+			nfp = nfp.layers[1]
+		}
 	}
+
 	// 可能无可用的broker
 	if nfp == fp {
 		err = fmt.Errorf("no alive broker found")

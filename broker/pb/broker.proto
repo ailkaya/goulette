@@ -1,0 +1,34 @@
+syntax = "proto3";  
+package pb;
+
+option go_package = "../pb";
+
+service BrokerService {
+    rpc Produce(stream ProduceRequest) returns (stream ProduceResponse);
+    rpc Consume(stream ConsumeRequest) returns (stream ConsumeResponse);
+}  
+
+message ProduceRequest {
+    string initTopic = 15;
+    uint64 mID = 1;
+    bytes msg = 2;
+}
+
+message ProduceResponse {
+    uint64 mID = 1;
+    uint64 ackID = 2;
+    int64 errorCode = 3;
+}
+
+message ConsumeRequest {
+    string initTopic = 15;
+    uint64 mID = 1;
+    uint64 ackID = 2;
+}
+
+message ConsumeResponse {
+    uint64 mID = 1;
+    bytes msg = 2;
+    int64 errorCode = 3;
+}
+

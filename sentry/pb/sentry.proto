@@ -1,0 +1,43 @@
+syntax = "proto3";
+package pb;
+
+option go_package = "../pb";
+
+service SentryService {
+  rpc RegisterTopic(OnlyTopic) returns (Empty);
+  rpc RegisterBroker(RegisterBrokerParams) returns (Empty);
+  rpc GetBrokersForProducer(OnlyTopic) returns (QueryResp);
+  rpc GetBrokersForConsumer(AddrAndTopic) returns (QueryResp);
+  rpc LogOff(OnlyAddr) returns (Empty);
+  rpc NoSuchTopic(NoSuchTopicParams) returns (Empty);
+}
+
+message Empty {}
+
+message OnlyTopic {
+  string topic = 1;
+}
+
+message OnlyAddr {
+  string addr = 1;
+}
+
+message AddrAndTopic {
+  string addr = 1;
+  string topic = 2;
+}
+
+message QueryResp {
+  repeated string brokers = 1;
+}
+
+message RegisterBrokerParams {
+  string addr = 1;
+  float weightFactor = 2;
+}
+
+message NoSuchTopicParams {
+  string brokerAddr = 1;
+  string addr = 2;
+  string topic = 3;
+}
