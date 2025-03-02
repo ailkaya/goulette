@@ -18,8 +18,8 @@
 - [部分异常情况处理](docs/部分异常情况处理.png)
 
 ### TODO
-- 持久化
+- sentry集群配置
 - 部分const量迁移至配置文件
-- 哨兵leader, follower职责分离
 - 结构优化
 - 解决producer/consumer中新旧连接交替所带来的问题
+- 单测

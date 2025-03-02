@@ -24,6 +24,7 @@ func (s *Service) Produce(stream grpc.BidiStreamingServer[pb.ProduceRequest, pb.
 	if err != nil {
 		return err
 	}
+	s.core.RegisterTopic(init.InitTopic)
 	to := s.core.GetOutput(init.InitTopic)
 	handler := newProduceHandler(to, stream)
 	handler.start()
@@ -35,6 +36,7 @@ func (s *Service) Consume(stream grpc.BidiStreamingServer[pb.ConsumeRequest, pb.
 	if err != nil {
 		return err
 	}
+	s.core.RegisterTopic(init.InitTopic)
 	from := s.core.GetOutput(init.InitTopic)
 	handler := newConsumerHandler(from, stream)
 	handler.start()

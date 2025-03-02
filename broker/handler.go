@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/ailkaya/goulette/broker/common/logger"
 	"github.com/ailkaya/goulette/broker/common/utils"
+	"github.com/ailkaya/goulette/broker/core"
 	"github.com/ailkaya/goulette/broker/pb"
 	"google.golang.org/grpc"
 	"time"
@@ -19,7 +20,8 @@ const (
 type produceHandler struct {
 	ctx    context.Context
 	cancel context.CancelFunc
-	to     chan []byte
+	topic  string
+	core   *core.Core
 	stream grpc.BidiStreamingServer[pb.ProduceRequest, pb.ProduceResponse]
 	// 令牌桶
 	tokenCh chan struct{}
@@ -29,7 +31,7 @@ type produceHandler struct {
 	log                           logger.ILog
 }
 
-func newProduceHandler(to chan []byte, stream grpc.BidiStreamingServer[pb.ProduceRequest, pb.ProduceResponse]) *produceHandler {
+func newProduceHandler(core *core.Core, topic string, stream grpc.BidiStreamingServer[pb.ProduceRequest, pb.ProduceResponse]) *produceHandler {
 	ctx, cancel := context.WithCancel(context.Background())
 	tokenCh := make(chan struct{}, BucketSize)
 	modifyTokenGenerateIntervalCh := make(chan time.Duration, 10)
@@ -37,7 +39,8 @@ func newProduceHandler(to chan []byte, stream grpc.BidiStreamingServer[pb.Produc
 	return &produceHandler{
 		ctx:                           ctx,
 		cancel:                        cancel,
-		to:                            to,
+		topic:                         topic,
+		core:                          core,
 		stream:                        stream,
 		tokenCh:                       tokenCh,
 		modifyTokenGenerateIntervalCh: modifyTokenGenerateIntervalCh,
@@ -84,8 +87,7 @@ func (ph *produceHandler) receive() {
 			ph.log.Errorf("broker producer handler receive error: %s", err.Error())
 			break
 		}
-		// TODO: 持久化
-		ph.to <- resp.Msg
+		ph.core.Push(ph.topic, resp.Msg)
 
 		// 发送ack
 		err = ph.stream.Send(&pb.ProduceResponse{
@@ -108,19 +110,21 @@ func (ph *produceHandler) close() {
 type ConsumerHandler struct {
 	ctx         context.Context
 	cancel      context.CancelFunc
-	from        chan []byte
+	topic       string
+	core        *core.Core
 	waiting     chan uint64
 	stream      grpc.BidiStreamingServer[pb.ConsumeRequest, pb.ConsumeResponse]
 	latestAcked uint64
 	log         logger.ILog
 }
 
-func newConsumerHandler(from chan []byte, stream grpc.BidiStreamingServer[pb.ConsumeRequest, pb.ConsumeResponse]) *ConsumerHandler {
+func newConsumerHandler(core *core.Core, topic string, stream grpc.BidiStreamingServer[pb.ConsumeRequest, pb.ConsumeResponse]) *ConsumerHandler {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &ConsumerHandler{
 		ctx:         ctx,
 		cancel:      cancel,
-		from:        from,
+		topic:       topic,
+		core:        core,
 		waiting:     make(chan uint64, MaxWaiting),
 		stream:      stream,
 		latestAcked: 0,
@@ -148,6 +152,7 @@ func (ch *ConsumerHandler) receive() {
 
 		if resp.AckID != -1 {
 			ch.latestAcked = resp.AckID
+			ch.core.UpdateConsumed(ch.topic, ch.latestAcked)
 		} else {
 			ch.waiting <- resp.MID
 		}
@@ -164,7 +169,7 @@ func (ch *ConsumerHandler) send() {
 		// TODO: 在尚未ack之前暂时保存已发送但未ack的消息，ack后再彻底删除
 		err := ch.stream.Send(&pb.ConsumeResponse{
 			MID:       mID,
-			Msg:       <-ch.from,
+			Msg:       ch.core.Pull(ch.topic),
 			ErrorCode: -1,
 		})
 		if err != nil {

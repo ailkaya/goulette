@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/ailkaya/goulette/sentry"
+	"github.com/ailkaya/goulette/sentry/pb"
 	"github.com/ailkaya/goulette/singleton"
 	grpc_recovery "github.com/grpc-ecosystem/go-grpc-middleware/recovery"
 	"go.etcd.io/etcd/server/v3/embed"
@@ -10,8 +12,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/status"
-	"github.com/ailkaya/goulette/sentry"
-	"github.com/ailkaya/goulette/sentry/pb"
 	"k8s.io/klog/v2"
 	"log"
 	"net"
