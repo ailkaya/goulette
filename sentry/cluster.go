@@ -3,12 +3,10 @@ package sentry
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"github.com/coreos/etcd/storage/storagepb"
 	"github.com/google/uuid"
 	"go.etcd.io/etcd/clientv3"
 	"log"
-	"time"
 )
 
 const (
@@ -27,19 +25,55 @@ type EtcdCli struct {
 	cancel context.CancelFunc
 	cli    *clientv3.Client
 	cosh   *ConsistentHash
+	//idGen  *snowflake.Node
 }
 
 func NewEtcdCli(cli *clientv3.Client, cosh *ConsistentHash) *EtcdCli {
 	ctx, cancel := context.WithCancel(context.Background())
+	//nodeID, err := getANodeID(ctx, cli)
+	//if err != nil {
+	//	// TODO: 错误处理
+	//}
+	//idG, err := snowflake.NewNode(nodeID)
+	//if err != nil {
+	//	// TODO: 错误处理
+	//}
 	ec := &EtcdCli{
 		ctx:    ctx,
 		cancel: cancel,
 		cli:    cli,
 		cosh:   cosh,
+		//idGen:  idG,
 	}
 	go ec.listen()
 	return ec
 }
+
+// 生成一个不重复的节点id
+//func getANodeID(ctx context.Context, cli *clientv3.Client) (int64, error) {
+//	resp, err := cli.MemberList(ctx)
+//	if err != nil {
+//		return 0, err
+//	}
+//
+//	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+//	res := int64(r.Intn(1<<10 - 1))
+//	arr := resp.Members
+//	running := true
+//	for {
+//		for _, m := range arr {
+//			if int64(m.ID) == res {
+//				running = false
+//				break
+//			}
+//		}
+//		if !running {
+//			break
+//		}
+//		res = int64(r.Intn(1<<10 - 1))
+//	}
+//	return res, nil
+//}
 
 type operation struct {
 	// 指明操作类型(removeTopicFromBroker/register/remove)
@@ -168,26 +202,26 @@ func deserialize(op []byte) *operation {
 	return unmarshalled
 }
 
-// GetEtcdLeader 查询 etcd 集群中的 leader
-func GetEtcdLeader(endpoints []string) (string, error) {
-	// 创建 etcd 客户端
-	cli, err := clientv3.New(clientv3.Config{
-		Endpoints:   endpoints,
-		DialTimeout: 5 * time.Second,
-	})
-	if err != nil {
-		return "", fmt.Errorf("failed to create etcd client: %w", err)
-	}
-	defer cli.Close()
-
-	// 获取成员信息
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	resp, err := cli.MemberLeader(ctx)
-	if err != nil {
-		return "", fmt.Errorf("failed to get member list: %w", err)
-	}
-
-	return resp.PeerURLs[0], nil
-}
+//// GetEtcdLeader 查询 etcd 集群中的 leader
+//func GetEtcdLeader(endpoints []string) (string, error) {
+//	// 创建 etcd 客户端
+//	cli, err := clientv3.New(clientv3.Config{
+//		Endpoints:   endpoints,
+//		DialTimeout: 5 * time.Second,
+//	})
+//	if err != nil {
+//		return "", fmt.Errorf("failed to create etcd client: %w", err)
+//	}
+//	defer cli.Close()
+//
+//	// 获取成员信息
+//	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+//	defer cancel()
+//
+//	resp, err := cli.MemberLeader(ctx)
+//	if err != nil {
+//		return "", fmt.Errorf("failed to get member list: %w", err)
+//	}
+//
+//	return resp.PeerURLs[0], nil
+//}

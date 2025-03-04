@@ -3,7 +3,6 @@ package goulette
 import (
 	"context"
 	brokerPb "github.com/ailkaya/goulette/broker/pb"
-	"github.com/ailkaya/goulette/sentry"
 	sentryPb "github.com/ailkaya/goulette/sentry/pb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -58,10 +57,7 @@ func (p *Producer) refresh() {
 }
 
 func (p *Producer) connect() error {
-	leaderUrl, err := sentry.GetEtcdLeader([]string{EndPoint})
-	if err != nil {
-		return err
-	}
+	leaderUrl := EndPoint
 	leaderConn, err := grpc.NewClient(leaderUrl, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return err
@@ -149,10 +145,7 @@ func NewConsumer(topic string) *Consumer {
 func (c *Consumer) refresh() {}
 
 func (c *Consumer) connect() error {
-	leaderUrl, err := sentry.GetEtcdLeader([]string{EndPoint})
-	if err != nil {
-		return err
-	}
+	leaderUrl := EndPoint
 	leaderConn, err := grpc.NewClient(leaderUrl, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return err
