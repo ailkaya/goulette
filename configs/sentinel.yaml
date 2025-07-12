@@ -1,0 +1,70 @@
+# Sentinel配置文件示例
+sentinel:
+  id: "sentinel-1"
+  address: ":50052"
+  log_level: "info"
+
+# etcd配置
+etcd:
+  # 是否启用内嵌etcd服务
+  enable_embedded: true
+  
+  # 内嵌etcd配置（当enable_embedded=true时使用）
+  embedded:
+    client_port: 2379
+    peer_port: 2380
+    data_dir: "./default.etcd"
+    name: "sentinel-1"
+    log_level: "info"
+    auto_compaction_mode: "revision"
+    auto_compaction_retention: "1000"
+    quota_backend_bytes: 8589934592  # 8GB
+  
+  # 外部etcd配置（当enable_embedded=false时使用）
+  external:
+    endpoints:
+      - "localhost:2379"
+      - "localhost:2380"
+      - "localhost:2381"
+
+# 集群配置
+cluster:
+  # 是否启用集群模式
+  enabled: false
+  
+  # 集群节点列表
+  nodes:
+    - id: "sentinel-1"
+      address: "localhost:50052"
+      etcd_port: 2379
+      etcd_peer_port: 2380
+    - id: "sentinel-2"
+      address: "localhost:50053"
+      etcd_port: 2381
+      etcd_peer_port: 2382
+    - id: "sentinel-3"
+      address: "localhost:50054"
+      etcd_port: 2383
+      etcd_peer_port: 2384
+
+# 健康检查配置
+health_check:
+  interval: "30s"
+  timeout: "5s"
+  unhealthy_threshold: 3
+  healthy_threshold: 2
+
+# 缓存配置
+cache:
+  # 副本缓存过期时间
+  replica_cache_ttl: "5m"
+  # 最大缓存条目数
+  max_cache_entries: 1000
+
+# 日志配置
+logging:
+  level: "info"
+  file: "logs/sentinel.log"
+  max_size: 100  # MB
+  max_age: 30    # days
+  max_backups: 10 

@@ -1,0 +1,168 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"time"
+
+	"github.com/ailkaya/goulette/internal/etcd"
+	pb "github.com/ailkaya/goulette/proto"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+)
+
+func TestEtcdIntergration() {
+	fmt.Println("=== Goulette etcd集成测试 ===")
+
+	// 1. 测试etcd管理器
+	fmt.Println("\n1. 测试etcd管理器...")
+	testEtcdManager()
+
+	// 2. 测试哨兵节点
+	fmt.Println("\n2. 测试哨兵节点...")
+	testSentinel()
+
+	fmt.Println("\n=== 测试完成 ===")
+}
+
+func testEtcdManager() {
+	// 连接到etcd
+	endpoints := []string{"localhost:2379"}
+	manager, err := etcd.NewEtcdManager(endpoints)
+	if err != nil {
+		log.Printf("创建etcd管理器失败: %v", err)
+		return
+	}
+	defer manager.Close()
+
+	// 等待连接建立
+	time.Sleep(2 * time.Second)
+
+	// 测试topic副本管理
+	topic := "test-topic"
+	brokers := []etcd.BrokerInfo{
+		{BrokerID: "broker-1", Address: "localhost:50051", Status: 0},
+		{BrokerID: "broker-2", Address: "localhost:50052", Status: 0},
+	}
+
+	// 设置topic副本
+	err = manager.SetTopicReplicas(topic, brokers, 2)
+	if err != nil {
+		log.Printf("设置topic副本失败: %v", err)
+		return
+	}
+	fmt.Printf("✓ 设置topic副本成功: %s\n", topic)
+
+	// 获取topic副本
+	replicaInfo, err := manager.GetTopicReplicas(topic)
+	if err != nil {
+		log.Printf("获取topic副本失败: %v", err)
+		return
+	}
+	if replicaInfo != nil {
+		fmt.Printf("✓ 获取topic副本成功: %s, 副本数: %d\n", replicaInfo.Topic, len(replicaInfo.Brokers))
+	}
+
+	// 测试操作日志
+	err = manager.LogOperation("testOperation", map[string]interface{}{
+		"test": "value",
+		"time": time.Now().Unix(),
+	})
+	if err != nil {
+		log.Printf("记录操作日志失败: %v", err)
+		return
+	}
+	fmt.Println("✓ 记录操作日志成功")
+
+	// 获取所有操作
+	operations, err := manager.GetAllOperations()
+	if err != nil {
+		log.Printf("获取操作日志失败: %v", err)
+		return
+	}
+	fmt.Printf("✓ 获取操作日志成功，共 %d 条\n", len(operations))
+
+	// 检查leader状态
+	if manager.IsLeader() {
+		fmt.Println("✓ 当前节点为etcd leader")
+	} else {
+		fmt.Println("✓ 当前节点不是etcd leader")
+	}
+}
+
+func testSentinel() {
+	// 连接到哨兵节点
+	conn, err := grpc.Dial("localhost:50052", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Printf("连接哨兵节点失败: %v", err)
+		return
+	}
+	defer conn.Close()
+
+	client := pb.NewSentinelServiceClient(conn)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// 测试GetTopicLeader (正常查询)
+	fmt.Println("测试GetTopicLeader (正常查询)...")
+	resp, err := client.GetTopicLeader(ctx, &pb.GetTopicLeaderRequest{
+		Topic:        "test-topic",
+		ReplicaCount: 2,
+	})
+	if err != nil {
+		log.Printf("GetTopicLeader失败: %v", err)
+		return
+	}
+	if resp.Leader != nil {
+		fmt.Printf("✓ GetTopicLeader成功，返回leader: %s\n", resp.Leader.Address)
+	} else {
+		fmt.Println("✓ GetTopicLeader成功，但没有可用的leader")
+	}
+
+	// 测试GetTopicLeader (带unreachable_brokers)
+	fmt.Println("测试GetTopicLeader (带unreachable_brokers)...")
+	resp2, err := client.GetTopicLeader(ctx, &pb.GetTopicLeaderRequest{
+		Topic:              "test-topic",
+		ReplicaCount:       2,
+		UnreachableBrokers: []string{"broker-1"},
+	})
+	if err != nil {
+		log.Printf("GetTopicLeader (带unreachable_brokers) 失败: %v", err)
+		return
+	}
+	if resp2.Leader != nil {
+		fmt.Printf("✓ GetTopicLeader (带unreachable_brokers) 成功，返回leader: %s\n", resp2.Leader.Address)
+	} else {
+		fmt.Println("✓ GetTopicLeader (带unreachable_brokers) 成功，但没有可用的leader")
+	}
+
+	// 测试KeepAlive
+	fmt.Println("测试KeepAlive...")
+	keepAliveResp, err := client.KeepAlive(ctx, &pb.KeepAliveRequest{
+		BrokerId: "test-broker",
+		Address:  "localhost:50053",
+	})
+	if err != nil {
+		log.Printf("KeepAlive失败: %v", err)
+		return
+	}
+	if keepAliveResp.Success {
+		fmt.Println("✓ KeepAlive成功")
+	}
+
+	// 测试RegisterBroker
+	fmt.Println("测试RegisterBroker...")
+	registerResp, err := client.RegisterBroker(ctx, &pb.RegisterBrokerRequest{
+		BrokerId: "test-broker-2",
+		Address:  "localhost:50054",
+		Topics:   []string{"test-topic", "test-topic-2"},
+	})
+	if err != nil {
+		log.Printf("RegisterBroker失败: %v", err)
+		return
+	}
+	if registerResp.Success {
+		fmt.Println("✓ RegisterBroker成功")
+	}
+}
